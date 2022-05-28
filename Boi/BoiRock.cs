@@ -5,99 +5,86 @@ using Terraria.ModLoader;
 using Terraria.Audio;
 using Terraria.ID;
 using System.Collections.Generic;
+using CalValEX.Boi.BaseClasses;
 
-namespace CalValEX.Projectiles.Boi
+namespace CalValEX.Boi
 {
-    public class BoiRock : ModProjectile
+    public class BoiRock : BoiEntity, ICollidable
     {
-        public override string Texture => "CalValEX/ExtraTextures/Boi/Block";
-        List<int> push = new List<int>() { ModContent.ProjectileType<Brimhita>(), ModContent.ProjectileType<Anahita>(), ModContent.ProjectileType<Spider>(), ModContent.ProjectileType<Terror>() };
+        public string Texture => "CalValEX/ExtraTextures/Boi/Block";
 
-        public override void SetStaticDefaults()
-        {
-            DisplayName.SetDefault("Rock");
-            Main.projFrames[Projectile.type] = 1;
-        }
+        //Those should be made into Icolliding
+        //List<int> push = new List<int>() { ModContent.ProjectileType<Brimhita>(), ModContent.ProjectileType<Anahita>(), ModContent.ProjectileType<Spider>(), ModContent.ProjectileType<Terror>() };
 
-        public override void SetDefaults()
-        {
-            Projectile.width = 91;
-            Projectile.height = 90;
-            Projectile.aiStyle = -1;
-            Projectile.ignoreWater = true;
-            Projectile.tileCollide = false;
-            Projectile.timeLeft = 18000;
-            Projectile.alpha = 255;
-        }
+        RectangleHitbox CollisionHitbox => new RectangleHitbox(Position - Vector2.One * 45, Vector2.One * 90);
 
-        public override void AI()
+        public float SimulationDistance => 64f;
+
+        public Vector2 MovementCheck(CircleHitbox hitbox)
         {
-            if (!CalValEX.DetectProjectile(ModContent.ProjectileType<BoiUI>()))
+            bool collisionOccured;
+
+            float distanceBetweenCenters = (hitbox.center - Position).Length();
+
+            //45 is the closest you can be to the rocks center without being inside of it
+            if (distanceBetweenCenters < (45 + hitbox.radius))
+                collisionOccured = true;
+
+            //Do some complicated math if you're not sure of the collision
+            else
             {
-                Projectile.active = false;
+                var c1c2Vect = (hitbox.center - Position).SafeNormalize(Vector2.Zero);
+                var outerPoint = hitbox.center + hitbox.radius * c1c2Vect;
+
+                collisionOccured = CollisionHitbox.Contains(outerPoint);
             }
 
-            var thisRect = Projectile.getRect();
-            for (int i = 0; i < Main.maxProjectiles; i++)
-            {
-                var proj = Main.projectile[i];
+            //Don't move the entity if no collision occured lol
+            if (!collisionOccured)
+                return Vector2.Zero;
 
-                if (proj != null && proj.active && proj.getRect().Intersects(thisRect) && proj.type == ModContent.ProjectileType<AnahitaTear>())
-                {
-                    Terraria.Audio.SoundEngine.PlaySound(Terraria.ID.SoundID.Item10, Projectile.Center);
-                    if ((proj.timeLeft < 110 && proj.velocity.Y > 0) || proj.velocity.Y <= 0)
-                    proj.active = false;
-                }
-            }
-            for (int i = 0; i < Main.maxProjectiles; i++)
-            {
-                var proj = Main.projectile[i];
+            //Check from which side of the box did the hitbox get into it.
+            Vector2 pushbackNormal;
+            float pushbackLength;
 
-                if (proj != null && proj.active && push.Contains(proj.type) && proj.getRect().Intersects(thisRect))
-                {
-                    Vector2 relative = proj.position - Projectile.position;
-                    Rectangle rightbox = new Rectangle((int)proj.position.X + proj.width, (int)proj.position.Y + 8, proj.width / 2, proj.height - 16);
-                    Rectangle leftbox = new Rectangle((int)proj.position.X, (int)proj.position.Y + 8, proj.width / 2, proj.height - 16);
-                    Rectangle bottombox = new Rectangle((int)proj.position.X + 8, (int)proj.position.Y + proj.height, proj.width - 16, proj.height / 2);
-                    Rectangle topbox = new Rectangle((int)proj.position.X + 8, (int)proj.position.Y, proj.width - 16, proj.height / 2);
-                    //If ana is to the right of the block and moving left
-                    if (relative.X >= 0 && proj.velocity.X < 0)
-                    {
-                        if (leftbox.Intersects(thisRect))
-                        {
-                            proj.position.X = Projectile.position.X + Projectile.width;
-                        }
-                    }
-                    //If ana is to the left of the block and moving right
-                    if (relative.X < 0 && proj.velocity.X > 0)
-                    {
-                        if (rightbox.Intersects(thisRect))
-                        {
-                            proj.position.X = Projectile.position.X - Projectile.width + proj.width/2;
-                        }
-                    }
-                    //If ana is below the block and moving up
-                    if (relative.Y >= 0 && proj.velocity.Y < 0)
-                    {
-                        if (topbox.Intersects(thisRect))
-                        {
-                            proj.position.Y = Projectile.position.Y + Projectile.height;
-                        }
-                    }
-                    //If ana is above the block and moving down
-                    if (relative.Y < 0 && proj.velocity.Y > 0)
-                    {
-                        if (bottombox.Intersects(thisRect))
-                        {
-                            proj.position.Y = Projectile.position.Y - Projectile.height + proj.height - 6;
-                        }
-                    }
-                }
+            if (CollisionHitbox.Bottom.IsIntersecting(hitbox.trajectoryLine))
+            {
+                pushbackNormal = Vector2.UnitY;
+                pushbackLength = (Position.Y + 45) - (hitbox.center.Y - hitbox.radius);
             }
+            else if (CollisionHitbox.Left.IsIntersecting(hitbox.trajectoryLine))
+            {
+                pushbackNormal = Vector2.UnitX;
+                pushbackLength = (Position.X - 45) - (hitbox.center.X + hitbox.radius);
+            }
+            else if (CollisionHitbox.Right.IsIntersecting(hitbox.trajectoryLine))
+            {
+                pushbackNormal = Vector2.UnitX;
+                pushbackLength = (Position.X + 45) - (hitbox.center.X - hitbox.radius);
+            }
+            else
+            {
+                pushbackNormal = Vector2.UnitY;
+                pushbackLength = (Position.Y - 45) - (hitbox.center.Y + hitbox.radius);
+            }
+
+            return pushbackNormal * pushbackLength;
         }
 
-        public override void PostDraw(Color lightColor)
-        {
-        }
+
+            //This should happen in the AnahitaTear OnCollide / Die code.
+
+            //for (int i = 0; i < Main.maxProjectiles; i++)
+            //{
+            //    var proj = Main.projectile[i];
+
+            //    if (proj != null && proj.active && proj.getRect().Intersects(thisRect) && proj.type == ModContent.ProjectileType<AnahitaTear>())
+            //    {
+            //        Terraria.Audio.SoundEngine.PlaySound(Terraria.ID.SoundID.Item10, Projectile.Center);
+            //        if ((proj.timeLeft < 110 && proj.velocity.Y > 0) || proj.velocity.Y <= 0)
+            //        proj.active = false;
+            //    }
+            //}
+
     }
 }

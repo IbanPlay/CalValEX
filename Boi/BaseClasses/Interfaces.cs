@@ -12,6 +12,95 @@ namespace CalValEX.Boi.BaseClasses
         enemy
     }
 
+    public struct CircleHitbox
+    {
+        public float radius;
+        public Vector2 center;
+        public Vector2 prevCenter;
+
+        public CircleHitbox(Vector2 _center, float _radius)
+        {
+            radius = _radius;
+            center = _center;
+            prevCenter = center;
+        }
+
+        public CircleHitbox(Vector2 _center, Vector2 _prevCenter, float _radius)
+        {
+            radius = _radius;
+            center = _center;
+            prevCenter = _prevCenter;
+        }
+
+        public Line trajectoryLine => new Line(center, prevCenter);
+    }
+
+    public struct RectangleHitbox
+    {
+        public Vector2 position;
+        public Vector2 center => position - dimensions / 2f;
+
+        public Vector2 dimensions;
+
+        public Line Top => new Line(position, position + Vector2.UnitX * dimensions.X);
+        public Line Bottom => new Line(position + Vector2.UnitY * dimensions.Y, position + Vector2.UnitY * dimensions.Y + Vector2.UnitX * dimensions.X);
+        public Line Left => new Line(position, position + Vector2.UnitY * dimensions.Y);
+        public Line Right => new Line(position + Vector2.UnitX * dimensions.X, position + Vector2.UnitY * dimensions.Y + Vector2.UnitX * dimensions.X);
+
+
+        public RectangleHitbox(Vector2 _position, Vector2 _dimensions)
+        {
+            position = _position;
+            dimensions = _dimensions;
+        }
+
+        public bool Contains(Vector2 point)
+        {
+            if (position.X <= point.X && point.X < position.X + dimensions.X && position.Y <= point.y)
+            {
+                return point.y < position.Y + dimensions.Y;
+            }
+
+            return false;
+        }
+    }
+
+    public struct Line
+    {
+        public Vector2 position;
+        public Vector2 size;
+
+        public Vector2 start => position;
+        public Vector2 finish => position + size;
+
+        public Line(Vector2 _position, Vector2 _size)
+        {
+            position = _position;
+            size = _size;
+        }
+
+        //I copied this from the internet teehee
+        public bool IsIntersecting(Line line2)
+        {
+            Vector2 a = start;
+            Vector2 b = finish;
+            Vector2 c = line2.start;
+            Vector2 d = line2.finish;
+
+            float denominator = ((b.X - a.X) * (d.Y - c.Y)) - ((b.Y - a.Y) * (d.X - c.X));
+            float numerator1 = ((a.Y - c.Y) * (d.X - c.X)) - ((a.X - c.X) * (d.Y - c.Y));
+            float numerator2 = ((a.Y - c.Y) * (b.X - a.X)) - ((a.X - c.X) * (b.Y - a.Y));
+
+            // Detect coincident lines (has a problem, read below)
+            if (denominator == 0) return numerator1 == 0 && numerator2 == 0;
+
+            float r = numerator1 / denominator;
+            float s = numerator2 / denominator;
+
+            return (r >= 0 && r <= 1) && (s >= 0 && s <= 1);
+        }
+    }
+
     /// <summary>
     /// Used for any entity that can deal damage, such as bullets or enemies with contact damage.
     /// </summary>
@@ -20,7 +109,7 @@ namespace CalValEX.Boi.BaseClasses
         /// <summary>
         /// What faction is this entity able to deal damage to?
         /// </summary>
-        public Factions[] hostileTo
+        public List<Factions> hostileTo
         {
             get;
         }
@@ -30,7 +119,7 @@ namespace CalValEX.Boi.BaseClasses
         /// </summary>
         /// <param name="hurtbox">The hurtbox of the entity you're checking if you're hittign</param>
         /// <returns>Wether or not a collision happened</returns>
-        public bool HitCheck(Rectangle hurtbox);
+        public bool HitCheck(CircleHitbox hurtbox);
 
         /// <summary>
         /// Returns the amount of damage this should deal
@@ -39,6 +128,11 @@ namespace CalValEX.Boi.BaseClasses
         /// </summary>
         /// <returns>The damage dealt</returns>
         public float DealDamage(BoiEntity target);
+
+        /// <summary>
+        /// Can the entity currently hit any other?
+        /// </summary>
+        public bool ActiveHitbox => true;
     }
 
     /// <summary>
@@ -51,7 +145,8 @@ namespace CalValEX.Boi.BaseClasses
         /// </summary>
         public float Health 
         {
-            get;        
+            get;
+            set;
         }
 
         /// <summary>
@@ -65,7 +160,7 @@ namespace CalValEX.Boi.BaseClasses
         /// <summary>
         /// Gets the hurtbox of the entity
         /// </summary>
-        public Rectangle Hurtbox
+        public CircleHitbox Hurtbox
         {
             get;
         }
@@ -76,9 +171,9 @@ namespace CalValEX.Boi.BaseClasses
         public bool Vulnerable => true;
 
         /// <summary>
-        /// Called when the entity gets hit. Use for any on hit effects.
+        /// Called when the entity gets hit. Use for any on hit effects. Do not use this function to remove health from the entity.
         /// </summary>
-        public void TakeHit(float damageTaken) { }
+        public void TakeHit(float damageTaken);
 
         /// <summary>
         /// Called when the entity hits zero health.
@@ -103,13 +198,20 @@ namespace CalValEX.Boi.BaseClasses
         }
 
         /// <summary>
-        /// Returns the distance between the object's surface and a potentially colliding entity.
-        /// Example : This would return 0.5 if the object is a sphere of radius 1, and the potentially colliding entity was 1.5 units of distance from the spheres center.
+        /// Returns the displacement the collision between this object and an entity may lead to.
         /// </summary>
-        /// <param name="position">The position of the potentially colliding entity</param>
+        /// <param name="entityHitbox">The potentially colliding entity' hitbox.</param>
         /// <returns></returns>
-        public float MovementCheck(Vector2 position);
+        public Vector2 MovementCheck(CircleHitbox entityHitbox);
 
+
+        /// <summary>
+        /// If the collision of this object is currently on. If the entity just never collides, please simply don't implement this interface uwu
+        /// </summary>
+        public bool CanCollide
+        {
+            get => true;
+        }
 
         /// <summary>
         /// What happens on a collision with an entity. If you want to hurt them on contact though, it would be wiser to implement an IDamageDealer interface to the object.
@@ -125,9 +227,9 @@ namespace CalValEX.Boi.BaseClasses
     public interface IColliding
     {
         /// <summary>
-        /// How big the radius of collision is for this entity.
+        /// Gets the hitbox of the colliding entity
         /// </summary>
-        public float CollisionCircleRadius
+        public CircleHitbox CollisionHitbox
         {
             get;
         }
@@ -137,13 +239,14 @@ namespace CalValEX.Boi.BaseClasses
         /// </summary>
         public bool CanCollide
         {
-            get;
+            get => true;
         }
 
         /// <summary>
-        /// What happens on a collision.
+        /// What happens on a collision. Return true if this entity dies on collision
+        /// If the collider is null, it means the entity collided with the out of bounds
         /// </summary>
-        public void OnCollide(BoiEntity collider) { }
+        public bool OnCollide(BoiEntity collider) => false;
     }
 
     /// <summary>
