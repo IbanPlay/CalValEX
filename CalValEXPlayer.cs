@@ -703,6 +703,7 @@ namespace CalValEX
 
         public override void PreUpdateMovement()
         {
+
             /*if (pongactive)
             {
                 Player.releaseHook = true;
@@ -718,7 +719,7 @@ namespace CalValEX
                 pongstage = 0;
                 pongoutcome = 0;
             }
-            /*if (boiactive)
+            if (boiactive)
             {
                 Player.releaseHook = true;
                 Player.releaseMount = true;
@@ -727,7 +728,7 @@ namespace CalValEX
                 {
                     Player.velocity.Y = 0;
                 }
-            }*/
+            }
             if (!boiactive)
             {
                 //boistage = 0;
